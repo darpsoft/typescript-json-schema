@@ -114,6 +114,7 @@ type RedefinedFields =
 export type DefinitionOrBoolean = Definition | boolean;
 export interface Definition extends Omit<JSONSchema7, RedefinedFields> {
     // The type field here is incompatible with the standard definition
+    bsonType?: string | string[];
     type?: string | string[];
 
     // Non-standard fields
@@ -551,18 +552,19 @@ export class JsonSchemaGenerator {
             if (comments.length) {
                 definition.description = comments
                     .map((comment) => {
-                      const newlineNormalizedComment = comment.text.replace(/\r\n/g, "\n");
+                        const newlineNormalizedComment = comment.text.replace(/\r\n/g, "\n");
 
-                      // If a comment contains a "{@link XYZ}" inline tag that could not be
-                      // resolved by the TS checker, then this comment will contain a trailing
-                      // whitespace that we need to remove.
-                      if (comment.kind === "linkText") {
-                        return newlineNormalizedComment.trim();
-                      }
+                        // If a comment contains a "{@link XYZ}" inline tag that could not be
+                        // resolved by the TS checker, then this comment will contain a trailing
+                        // whitespace that we need to remove.
+                        if (comment.kind === "linkText") {
+                            return newlineNormalizedComment.trim();
+                        }
 
-                      return newlineNormalizedComment;
+                        return newlineNormalizedComment;
                     })
-                    .join("").trim();
+                    .join("")
+                    .trim();
             }
         }
 
@@ -619,6 +621,7 @@ export class JsonSchemaGenerator {
             }
 
             if (validationKeywords[name] || this.userValidationKeywords[name]) {
+                name = name === "type" ? "bsonType" : name;
                 definition[name] = text === undefined ? "" : parseValue(symbol, name, text);
             } else {
                 // special annotations
@@ -677,8 +680,7 @@ export class JsonSchemaGenerator {
             } else if (flags & ts.TypeFlags.Any || flags & ts.TypeFlags.Unknown) {
                 // no type restriction, so that anything will match
             } else if (propertyTypeString === "Date" && !this.args.rejectDateType) {
-                definition.type = "string";
-                definition.format = definition.format || "date-time";
+                definition.type = "date";
             } else if (propertyTypeString === "object") {
                 definition.type = "object";
                 definition.properties = {};
@@ -1135,6 +1137,15 @@ export class JsonSchemaGenerator {
         return definition;
     }
 
+    private transformKey(definition: Definition, oldKey: string, newKey: string) {
+        const definitionUpdated = {
+            ...definition,
+            [newKey]: definition[oldKey],
+        };
+        delete definitionUpdated[oldKey];
+        return definitionUpdated;
+    }
+
     /**
      * Gets/generates a globally unique type name for the given type
      */
@@ -1401,7 +1412,7 @@ export class JsonSchemaGenerator {
             makeNullable(returnedDefinition);
         }
 
-        return returnedDefinition;
+        return this.transformKey(returnedDefinition, "type", "bsonType");
     }
 
     public setSchemaOverride(symbolName: string, schema: Definition): void {
@@ -1427,7 +1438,7 @@ export class JsonSchemaGenerator {
         if (this.args.ref && includeReffedDefinitions && Object.keys(this.reffedDefinitions).length > 0) {
             def.definitions = this.reffedDefinitions;
         }
-        def["$schema"] = "http://json-schema.org/draft-07/schema#";
+        def.title = symbolName;
         const id = this.args.id;
         if (id) {
             def["$id"] = this.args.id;
@@ -1437,7 +1448,6 @@ export class JsonSchemaGenerator {
 
     public getSchemaForSymbols(symbolNames: string[], includeReffedDefinitions: boolean = true): Definition {
         const root = {
-            $schema: "http://json-schema.org/draft-07/schema#",
             definitions: {},
         };
 
