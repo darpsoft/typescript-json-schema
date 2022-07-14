@@ -5,6 +5,7 @@ import { createHash } from "crypto";
 import * as ts from "typescript";
 import { JSONSchema7 } from "json-schema";
 import { pathEqual } from "path-equal";
+
 export { Program, CompilerOptions, Symbol } from "typescript";
 
 const vm = require("vm");
@@ -1704,6 +1705,7 @@ export async function exec(filePattern: string, fullTypeName: string, args = get
     }
 
     const json = stringify(definition, null, 4) + "\n\n";
+    const jsonSort = require("sort-json")(json);
     if (args.out) {
         return new Promise((resolve, reject) => {
             const fs = require("fs");
@@ -1711,7 +1713,7 @@ export async function exec(filePattern: string, fullTypeName: string, args = get
                 if (mkErr) {
                     return reject(new Error("Unable to create parent directory for output file: " + mkErr.message));
                 }
-                fs.writeFile(args.out, json, function (wrErr: Error) {
+                fs.writeFile(args.out, jsonSort, function (wrErr: Error) {
                     if (wrErr) {
                         return reject(new Error("Unable to write output file: " + wrErr.message));
                     }
