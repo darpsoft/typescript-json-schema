@@ -545,29 +545,6 @@ export class JsonSchemaGenerator {
             return;
         }
 
-        if (!this.isFromDefaultLib(symbol)) {
-            // the comments for a symbol
-            const comments = symbol.getDocumentationComment(this.tc);
-
-            if (comments.length) {
-                definition.description = comments
-                    .map((comment) => {
-                        const newlineNormalizedComment = comment.text.replace(/\r\n/g, "\n");
-
-                        // If a comment contains a "{@link XYZ}" inline tag that could not be
-                        // resolved by the TS checker, then this comment will contain a trailing
-                        // whitespace that we need to remove.
-                        if (comment.kind === "linkText") {
-                            return newlineNormalizedComment.trim();
-                        }
-
-                        return newlineNormalizedComment;
-                    })
-                    .join("")
-                    .trim();
-            }
-        }
-
         // jsdocs are separate from comments
         const jsdocs = symbol.getJsDocTags();
         jsdocs.forEach((doc) => {
@@ -621,7 +598,6 @@ export class JsonSchemaGenerator {
             }
 
             if (validationKeywords[name] || this.userValidationKeywords[name]) {
-                name = name === "type" ? "bsonType" : name;
                 definition[name] = text === undefined ? "" : parseValue(symbol, name, text);
             } else {
                 // special annotations
@@ -1038,6 +1014,7 @@ export class JsonSchemaGenerator {
             );
         });
         const fullName = this.tc.typeToString(clazzType, undefined, ts.TypeFormatFlags.UseFullyQualifiedType);
+        const typeName = clazzType.aliasSymbol?.escapedName;
 
         const modifierFlags = ts.getCombinedModifierFlags(node);
 
@@ -1096,6 +1073,10 @@ export class JsonSchemaGenerator {
 
             if (definition.type === "object" && Object.keys(propertyDefinitions).length > 0) {
                 definition.properties = propertyDefinitions;
+            }
+
+            if (definition.type === "object" && typeName) {
+                definition.title = typeName;
             }
 
             if (this.args.defaultProps) {
@@ -1438,7 +1419,6 @@ export class JsonSchemaGenerator {
         if (this.args.ref && includeReffedDefinitions && Object.keys(this.reffedDefinitions).length > 0) {
             def.definitions = this.reffedDefinitions;
         }
-        def.title = symbolName;
         const id = this.args.id;
         if (id) {
             def["$id"] = this.args.id;
@@ -1593,6 +1573,9 @@ export function buildGenerator(
                     const fullyQualifiedName = tc.getFullyQualifiedName(symbol);
                     const typeName = fullyQualifiedName.replace(/".*"\./, "");
                     const name = !args.uniqueNames ? typeName : `${typeName}.${generateHashOfNode(node, relativePath)}`;
+                    if (typeName === "UserType") {
+                        console.log({ typeName, symbol });
+                    }
 
                     symbols.push({ name, typeName, fullyQualifiedName, symbol });
                     if (!userSymbols[name]) {
