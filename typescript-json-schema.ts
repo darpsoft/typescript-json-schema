@@ -648,7 +648,7 @@ export class JsonSchemaGenerator {
                     defaultNumberType === "integer";
                 definition.type = isInteger ? "integer" : "number";
             } else if (flags & ts.TypeFlags.Boolean) {
-                definition.type = "boolean";
+                definition.type = "bool";
             } else if (flags & ts.TypeFlags.Null) {
                 definition.type = "null";
             } else if (flags & ts.TypeFlags.Undefined || propertyTypeString === "void") {
@@ -890,7 +890,7 @@ export class JsonSchemaGenerator {
                 enumValues[0] !== enumValues[1];
 
             if (isOnlyBooleans) {
-                pushSimpleType("boolean");
+                pushSimpleType("bool");
             } else {
                 const enumSchema: Definition = { enum: enumValues.sort() };
 
@@ -912,7 +912,7 @@ export class JsonSchemaGenerator {
                         return typeof x === "boolean";
                     })
                 ) {
-                    enumSchema.type = "boolean";
+                    enumSchema.type = "bool";
                 }
 
                 schemas.push(enumSchema);
@@ -1573,9 +1573,6 @@ export function buildGenerator(
                     const fullyQualifiedName = tc.getFullyQualifiedName(symbol);
                     const typeName = fullyQualifiedName.replace(/".*"\./, "");
                     const name = !args.uniqueNames ? typeName : `${typeName}.${generateHashOfNode(node, relativePath)}`;
-                    if (typeName === "UserType") {
-                        console.log({ typeName, symbol });
-                    }
 
                     symbols.push({ name, typeName, fullyQualifiedName, symbol });
                     if (!userSymbols[name]) {
