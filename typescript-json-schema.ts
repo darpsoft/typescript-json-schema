@@ -1699,9 +1699,41 @@ export async function exec(filePattern: string, fullTypeName: string, args = get
         onlyIncludeFiles = onlyIncludeFiles.map(normalizeFileName);
     }
 
-    const definition = generateSchema(program, fullTypeName, args, onlyIncludeFiles);
+    let definition = generateSchema(program, fullTypeName, args, onlyIncludeFiles) as Definition;
     if (definition === null) {
         throw new Error("No output definition. Probably caused by errors prior to this?");
+    }
+
+    if (definition.allOf !== undefined) {
+        for (const iterator of definition.allOf) {
+            const schemas = iterator as Definition;
+            definition = {
+                ...definition,
+                ...schemas,
+                properties: {
+                    ...definition?.properties,
+                    ...schemas.properties,
+                },
+                required: [...(definition.required || []), ...(schemas.required || [])],
+            };
+        }
+        delete definition.allOf;
+        delete definition.title;
+    }
+
+    if (definition.required && definition.required.length === 0) {
+        delete definition.required;
+    } else {
+        definition.required = definition.required?.sort();
+    }
+
+    if (definition.type === undefined) {
+        delete definition.type;
+        definition.bsonType = "object";
+    }
+
+    if (definition.title === undefined) {
+        definition.title = fullTypeName;
     }
 
     const json = stringify(definition, null, 4) + "\n\n";
