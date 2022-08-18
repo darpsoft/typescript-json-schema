@@ -36,6 +36,43 @@ const REGEX_GROUP_JSDOC = /^[.]?([\w]+)\s+(\S|\S[\s\S]*\S)\s*$/g;
 const REGEX_REQUIRE = /^(\s+)?require\((\'@?[a-zA-Z0-9.\/_-]+\'|\"@?[a-zA-Z0-9.\/_-]+\")\)(\.([a-zA-Z0-9_$]+))?(\s+|$)/;
 const NUMERIC_INDEX_PATTERN = "^[0-9]+$";
 
+function cleanDefinition(currentDefinition: Definition, fullTypeName?: string) {
+    let definition = { ...currentDefinition };
+
+    if (definition.allOf !== undefined) {
+        for (const iterator of definition.allOf) {
+            const schemas = iterator as Definition;
+            definition = {
+                ...definition,
+                ...schemas,
+                properties: {
+                    ...definition?.properties,
+                    ...schemas.properties,
+                },
+                required: [...(definition.required || []), ...(schemas.required || [])],
+            };
+        }
+        delete definition.allOf;
+    }
+
+    if (definition.required && definition.required.length === 0) {
+        delete definition.required;
+    } else {
+        definition.required = definition.required?.sort();
+    }
+
+    if (definition.type === undefined) {
+        delete definition.type;
+        definition.bsonType = "object";
+    }
+
+    if (definition.title === undefined) {
+        definition.title = fullTypeName;
+    }
+
+    return definition;
+}
+
 export function getDefaultArgs(): Args {
     return {
         ref: true,
@@ -1015,7 +1052,11 @@ export class JsonSchemaGenerator {
             );
         });
         const fullName = this.tc.typeToString(clazzType, undefined, ts.TypeFormatFlags.UseFullyQualifiedType);
-        const typeName = clazzType.aliasSymbol?.escapedName;
+
+        const parent = clazzType.getSymbol()?.declarations?.[0]?.parent?.parent as any;
+        const parentType = parent?.localSymbol?.escapedName as string;
+
+        const typeName = clazzType.aliasSymbol?.escapedName || parentType;
 
         const modifierFlags = ts.getCombinedModifierFlags(node);
 
@@ -1122,7 +1163,7 @@ export class JsonSchemaGenerator {
     private transformKey(definition: Definition, oldKey: string, newKey: string) {
         const definitionUpdated = {
             ...definition,
-            [newKey]: definition[oldKey],
+            ...(definition[oldKey] ? { [newKey]: definition[oldKey] } : {}),
         };
         delete definitionUpdated[oldKey];
         return definitionUpdated;
@@ -1393,8 +1434,9 @@ export class JsonSchemaGenerator {
         if (otherAnnotations["nullable"]) {
             makeNullable(returnedDefinition);
         }
+        const verifiedDefinition = cleanDefinition(returnedDefinition);
 
-        return this.transformKey(returnedDefinition, "type", "bsonType");
+        return this.transformKey(verifiedDefinition, "type", "bsonType");
     }
 
     public setSchemaOverride(symbolName: string, schema: Definition): void {
@@ -1704,39 +1746,9 @@ export async function exec(filePattern: string, fullTypeName: string, args = get
         throw new Error("No output definition. Probably caused by errors prior to this?");
     }
 
-    if (definition.allOf !== undefined) {
-        for (const iterator of definition.allOf) {
-            const schemas = iterator as Definition;
-            definition = {
-                ...definition,
-                ...schemas,
-                properties: {
-                    ...definition?.properties,
-                    ...schemas.properties,
-                },
-                required: [...(definition.required || []), ...(schemas.required || [])],
-            };
-        }
-        delete definition.allOf;
-        delete definition.title;
-    }
+    const verifiedDefinition = cleanDefinition(definition, fullTypeName);
 
-    if (definition.required && definition.required.length === 0) {
-        delete definition.required;
-    } else {
-        definition.required = definition.required?.sort();
-    }
-
-    if (definition.type === undefined) {
-        delete definition.type;
-        definition.bsonType = "object";
-    }
-
-    if (definition.title === undefined) {
-        definition.title = fullTypeName;
-    }
-
-    const json = stringify(definition, null, 4) + "\n\n";
+    const json = stringify(verifiedDefinition, null, 4) + "\n\n";
     const jsonSort = require("sort-json")(json);
     if (args.out) {
         return new Promise((resolve, reject) => {
