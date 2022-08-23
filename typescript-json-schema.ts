@@ -1055,8 +1055,9 @@ export class JsonSchemaGenerator {
 
         const parent = clazzType.getSymbol()?.declarations?.[0]?.parent?.parent as any;
         const parentType = parent?.localSymbol?.escapedName as string;
+        const parentTypeInterface = clazzType.getSymbol()?.escapedName;
 
-        const typeName = clazzType.aliasSymbol?.escapedName || parentType;
+        const typeName = clazzType.aliasSymbol?.escapedName || parentType || parentTypeInterface;
 
         const modifierFlags = ts.getCombinedModifierFlags(node);
 
